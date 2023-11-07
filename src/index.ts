@@ -5,6 +5,8 @@ import { ED25519_PKCS8_HEADER } from "./webcrypto";
 import { pipe } from "@solana/functional";
 import {
   //generateKeyPair,
+  lamports,
+  assertIsAddress,
   getBase64EncodedWireTransaction,
   signTransaction,
   setTransactionFeePayer,
@@ -19,7 +21,7 @@ import {
   createSolanaRpc,
 } from "@solana/web3.js";
 
-require("@solana/webcrypto-ed25519-polyfill");
+import "@solana/webcrypto-ed25519-polyfill";
 
 const devnetTransport = createDefaultRpcTransport({
   url: "https://api.devnet.solana.com",
@@ -83,14 +85,11 @@ let keypair: CryptoKeyPair | null = null;
       if (!keypair) {
         return;
       }
-      const exportedPublicKey = await window.crypto.subtle.exportKey(
-        "raw",
-        keypair.publicKey
-      );
-      const exportedPrivateKey = await window.crypto.subtle.exportKey(
-        "pkcs8",
-        keypair.privateKey
-      );
+
+      const [exportedPublicKey, exportedPrivateKey] = await Promise.all([
+        window.crypto.subtle.exportKey("raw", keypair.publicKey),
+        window.crypto.subtle.exportKey("pkcs8", keypair.privateKey),
+      ]);
 
       const solanaKey = new Uint8Array(64);
       solanaKey.set(new Uint8Array(exportedPrivateKey).slice(16));
@@ -112,7 +111,7 @@ let keypair: CryptoKeyPair | null = null;
       const addr = await getAddressFromPublicKey(keypair.publicKey);
       const amount = 0.5;
       const res = await rpc
-        .requestAirdrop(addr, BigInt(amount * 1000000000) as any)
+        .requestAirdrop(addr, lamports(BigInt(amount * 1000000000)))
         .send();
       console.log(res);
       alert("Airdrop success!");
@@ -145,42 +144,28 @@ let keypair: CryptoKeyPair | null = null;
       if (!keypair) {
         return;
       }
-      await transferSOL(
-        keypair,
-        amount,
-        recipient as Base58EncodedAddress,
-        simulate
-      );
+      assertIsAddress(recipient);
+      await transferSOL(keypair, amount, recipient, simulate);
     })().catch(console.error)
   );
 })().catch(console.error);
 
-async function parseKeypair(bts: Uint8Array): Promise<CryptoKeyPair> {
-  const solanaKeypair = bts;
-  const privateBytes = solanaKeypair.slice(0, 32);
-  const privateKey = new Uint8Array(48);
-  privateKey.set(ED25519_PKCS8_HEADER);
-  privateKey.set(privateBytes, ED25519_PKCS8_HEADER.length);
+async function parseKeypair(solanaKeypair: Uint8Array): Promise<CryptoKeyPair> {
+  const privateKeyBytes = new Uint8Array(48);
+  privateKeyBytes.set(ED25519_PKCS8_HEADER);
+  privateKeyBytes.set(solanaKeypair.slice(0, 32), ED25519_PKCS8_HEADER.length);
 
-  const publicKey = solanaKeypair.slice(32);
+  const publicKeyBytes = solanaKeypair.slice(32);
 
-  const pkc = await crypto.subtle.importKey(
-    "pkcs8",
-    privateKey,
-    "Ed25519",
-    false,
-    ["sign"]
-  );
+  const [privateKey, publicKey] = await Promise.all([
+    crypto.subtle.importKey("pkcs8", privateKeyBytes, "Ed25519", false, [
+      "sign",
+    ]),
 
-  const pPub = await crypto.subtle.importKey(
-    "raw",
-    publicKey,
-    "Ed25519",
-    true,
-    ["verify"]
-  );
+    crypto.subtle.importKey("raw", publicKeyBytes, "Ed25519", true, ["verify"]),
+  ]);
 
-  return { privateKey: pkc, publicKey: pPub };
+  return { privateKey, publicKey };
 }
 
 const transferSOL = async (
@@ -258,6 +243,7 @@ async function readBytes(file: File): Promise<Uint8Array | null> {
 
         if (
           Array.isArray(parsed) &&
+          parsed.length === 64 &&
           parsed.every((item) => typeof item === "number")
         ) {
           resolve(new Uint8Array(parsed));
