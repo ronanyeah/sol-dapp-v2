@@ -6,6 +6,7 @@ import { pipe } from "@solana/functional";
 import {
   //generateKeyPair,
   lamports,
+  Address,
   assertIsAddress,
   getBase64EncodedWireTransaction,
   signTransaction,
@@ -16,7 +17,6 @@ import {
   IInstruction,
   createTransaction,
   getAddressFromPublicKey,
-  Base58EncodedAddress,
   createDefaultRpcTransport,
   createSolanaRpc,
 } from "@solana/web3.js";
@@ -171,10 +171,10 @@ async function parseKeypair(solanaKeypair: Uint8Array): Promise<CryptoKeyPair> {
 const transferSOL = async (
   keypair: CryptoKeyPair,
   amount: number,
-  recipient: Base58EncodedAddress,
+  recipient: Address,
   simulate: boolean
 ) => {
-  const pubStr = await getAddressFromPublicKey(keypair.publicKey);
+  const signerPub = await getAddressFromPublicKey(keypair.publicKey);
 
   const data = new Uint8Array(12);
   const view = new DataView(data.buffer);
@@ -182,10 +182,10 @@ const transferSOL = async (
   view.setBigInt64(4, BigInt(amount), true);
 
   const ix: IInstruction = {
-    programAddress: "11111111111111111111111111111111" as Base58EncodedAddress,
+    programAddress: "11111111111111111111111111111111" as Address,
     accounts: [
       {
-        address: pubStr,
+        address: signerPub,
         role: AccountRole.WRITABLE_SIGNER,
       },
       {
@@ -201,7 +201,7 @@ const transferSOL = async (
   const encodedTx = await pipe(
     createTransaction({ version: 0 }),
     (tx) => appendTransactionInstruction(ix, tx),
-    (tx) => setTransactionFeePayer(pubStr, tx),
+    (tx) => setTransactionFeePayer(signerPub, tx),
     (tx) => setTransactionLifetimeUsingBlockhash(bh.value, tx),
     (tx) => signTransaction([keypair], tx),
     async (tx) => getBase64EncodedWireTransaction(await tx)
