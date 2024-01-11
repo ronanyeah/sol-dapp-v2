@@ -1,7 +1,6 @@
 /* eslint-disable fp/no-mutation, fp/no-mutating-methods */
 const { Elm } = require("./Main.elm");
 import { ElmApp } from "./ports";
-import { ED25519_PKCS8_HEADER } from "./webcrypto";
 import { pipe } from "@solana/functional";
 import {
   //generateKeyPair,
@@ -19,6 +18,7 @@ import {
   getAddressFromPublicKey,
   createDefaultRpcTransport,
   createSolanaRpc,
+  createPrivateKeyFromBytes,
 } from "@solana/web3.js";
 
 import "@solana/webcrypto-ed25519-polyfill";
@@ -38,9 +38,10 @@ let keypair: CryptoKeyPair | null = null;
   });
 
   app.ports.generateKey.subscribe(async () => {
-    //const newKeys = await generateKeyPair();
-    const exportable = true;
-    const newKeys = (await crypto.subtle.generateKey("Ed25519", exportable, [
+    // NOTE: generateKeyPair is not extractable
+    // const newKeys = await generateKeyPair();
+    const extractable = true;
+    const newKeys = (await crypto.subtle.generateKey("Ed25519", extractable, [
       "sign",
       "verify",
     ])) as CryptoKeyPair;
@@ -50,7 +51,7 @@ let keypair: CryptoKeyPair | null = null;
 
     app.ports.pubkeyCb.send({
       addr: addr,
-      exportable,
+      exportable: extractable,
     });
 
     app.ports.balanceCb.send(0);
@@ -151,16 +152,11 @@ let keypair: CryptoKeyPair | null = null;
 })().catch(console.error);
 
 async function parseKeypair(solanaKeypair: Uint8Array): Promise<CryptoKeyPair> {
-  const privateKeyBytes = new Uint8Array(48);
-  privateKeyBytes.set(ED25519_PKCS8_HEADER);
-  privateKeyBytes.set(solanaKeypair.slice(0, 32), ED25519_PKCS8_HEADER.length);
-
+  const privateKeyBytes = solanaKeypair.slice(0, 32);
   const publicKeyBytes = solanaKeypair.slice(32);
 
   const [privateKey, publicKey] = await Promise.all([
-    crypto.subtle.importKey("pkcs8", privateKeyBytes, "Ed25519", false, [
-      "sign",
-    ]),
+    createPrivateKeyFromBytes(privateKeyBytes),
 
     crypto.subtle.importKey("raw", publicKeyBytes, "Ed25519", true, ["verify"]),
   ]);
