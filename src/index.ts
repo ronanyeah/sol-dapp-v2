@@ -59,11 +59,7 @@ let keypair: CryptoKeyPair | null = null;
 
   app.ports.fileOut.subscribe(async (val: File) =>
     (async () => {
-      const kp = await readBytes(val);
-
-      if (!kp) {
-        return alert("Private key file failed to decode.");
-      }
+      const kp = await readKeyfile(val);
 
       const pair = await parseKeypair(kp);
 
@@ -225,36 +221,10 @@ const transferSOL = async (
   }
 };
 
-async function readBytes(file: File): Promise<Uint8Array | null> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+async function readKeyfile(file: File): Promise<Uint8Array> {
+  const arrayBuffer = await file.arrayBuffer();
+  const content = new TextDecoder().decode(arrayBuffer);
+  const parsed = JSON.parse(content);
 
-    reader.onload = (event) => {
-      try {
-        const content = event.target?.result;
-        if (typeof content !== "string") {
-          return resolve(null);
-        }
-        const parsed = JSON.parse(content);
-
-        if (
-          Array.isArray(parsed) &&
-          parsed.length === 64 &&
-          parsed.every((item) => typeof item === "number")
-        ) {
-          resolve(new Uint8Array(parsed));
-        } else {
-          resolve(null);
-        }
-      } catch (error) {
-        reject(error);
-      }
-    };
-
-    reader.onerror = () => {
-      reject();
-    };
-
-    reader.readAsText(file);
-  });
+  return new Uint8Array(parsed);
 }
