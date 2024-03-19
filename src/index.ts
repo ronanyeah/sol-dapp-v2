@@ -5,7 +5,8 @@ import { pipe } from "@solana/functional";
 import {
   //generateKeyPair,
   lamports,
-  Address,
+  address,
+  Base58EncodedAddress,
   assertIsAddress,
   getBase64EncodedWireTransaction,
   signTransaction,
@@ -18,8 +19,8 @@ import {
   getAddressFromPublicKey,
   createDefaultRpcTransport,
   createSolanaRpc,
-  createPrivateKeyFromBytes,
 } from "@solana/web3.js";
+import { createPrivateKeyFromBytes } from "@solana/keys";
 
 import "@solana/webcrypto-ed25519-polyfill";
 
@@ -163,7 +164,7 @@ async function parseKeypair(solanaKeypair: Uint8Array): Promise<CryptoKeyPair> {
 const transferSOL = async (
   keypair: CryptoKeyPair,
   amount: number,
-  recipient: Address,
+  recipient: Base58EncodedAddress,
   simulate: boolean
 ) => {
   const signerPub = await getAddressFromPublicKey(keypair.publicKey);
@@ -174,7 +175,7 @@ const transferSOL = async (
   view.setBigInt64(4, BigInt(amount), true);
 
   const ix: IInstruction = {
-    programAddress: "11111111111111111111111111111111" as Address,
+    programAddress: address("11111111111111111111111111111111"),
     accounts: [
       {
         address: signerPub,
