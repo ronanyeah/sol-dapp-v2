@@ -3,34 +3,30 @@ const { Elm } = require("./Main.elm");
 import { ElmApp } from "./ports";
 import { pipe } from "@solana/functional";
 import {
-  //generateKeyPair,
+  Address,
   lamports,
   address,
-  Base58EncodedAddress,
   assertIsAddress,
+  createSignerFromKeyPair,
+  KeyPairSigner,
+  signTransactionMessageWithSigners,
   getBase64EncodedWireTransaction,
-  signTransaction,
-  setTransactionFeePayer,
-  setTransactionLifetimeUsingBlockhash,
-  appendTransactionInstruction,
+  setTransactionMessageFeePayerSigner,
+  setTransactionMessageLifetimeUsingBlockhash,
+  appendTransactionMessageInstruction,
   AccountRole,
   IInstruction,
-  createTransaction,
-  getAddressFromPublicKey,
-  createDefaultRpcTransport,
+  createTransactionMessage,
   createSolanaRpc,
 } from "@solana/web3.js";
 import { createPrivateKeyFromBytes } from "@solana/keys";
 
 import "@solana/webcrypto-ed25519-polyfill";
 
-const devnetTransport = createDefaultRpcTransport({
-  url: "https://api.devnet.solana.com",
-});
-const rpc = createSolanaRpc({ transport: devnetTransport });
+const rpc = createSolanaRpc("https://api.devnet.solana.com");
 
 // eslint-disable-next-line fp/no-let
-let keypair: CryptoKeyPair | null = null;
+let keypair: KeyPairSigner<string> | null = null;
 
 (async () => {
   const app: ElmApp = Elm.Main.init({
@@ -42,16 +38,15 @@ let keypair: CryptoKeyPair | null = null;
     // NOTE: generateKeyPair is not extractable
     // const newKeys = await generateKeyPair();
     const extractable = true;
-    const newKeys = (await crypto.subtle.generateKey("Ed25519", extractable, [
+    const newKeys = await crypto.subtle.generateKey("Ed25519", extractable, [
       "sign",
       "verify",
-    ])) as CryptoKeyPair;
-    keypair = newKeys;
-
-    const addr = await getAddressFromPublicKey(keypair.publicKey);
+    ]);
+    const signer = await createSignerFromKeyPair(newKeys);
+    keypair = signer;
 
     app.ports.pubkeyCb.send({
-      addr: addr,
+      addr: signer.address,
       exportable: extractable,
     });
 
@@ -66,14 +61,13 @@ let keypair: CryptoKeyPair | null = null;
 
       keypair = pair;
 
-      const addr = await getAddressFromPublicKey(keypair.publicKey);
       app.ports.pubkeyCb.send({
-        addr: addr,
+        addr: pair.address,
         exportable: false,
       });
 
       app.ports.balanceCb.send(
-        Number((await rpc.getBalance(addr).send()).value)
+        Number((await rpc.getBalance(pair.address).send()).value)
       );
     })().catch(console.error)
   );
@@ -85,8 +79,8 @@ let keypair: CryptoKeyPair | null = null;
       }
 
       const [exportedPublicKey, exportedPrivateKey] = await Promise.all([
-        window.crypto.subtle.exportKey("raw", keypair.publicKey),
-        window.crypto.subtle.exportKey("pkcs8", keypair.privateKey),
+        window.crypto.subtle.exportKey("raw", keypair.keyPair.publicKey),
+        window.crypto.subtle.exportKey("pkcs8", keypair.keyPair.privateKey),
       ]);
 
       const solanaKey = new Uint8Array(64);
@@ -106,10 +100,9 @@ let keypair: CryptoKeyPair | null = null;
       if (!keypair) {
         return;
       }
-      const addr = await getAddressFromPublicKey(keypair.publicKey);
       const amount = 0.5;
       const res = await rpc
-        .requestAirdrop(addr, lamports(BigInt(amount * 1000000000)))
+        .requestAirdrop(keypair.address, lamports(BigInt(amount * 1000000000)))
         .send();
       console.log(res);
       alert("Airdrop success!");
@@ -129,10 +122,8 @@ let keypair: CryptoKeyPair | null = null;
         return;
       }
 
-      const addr = await getAddressFromPublicKey(keypair.publicKey);
-
       app.ports.balanceCb.send(
-        Number((await rpc.getBalance(addr).send()).value)
+        Number((await rpc.getBalance(keypair.address).send()).value)
       );
     })().catch(console.error)
   );
@@ -148,7 +139,9 @@ let keypair: CryptoKeyPair | null = null;
   );
 })().catch(console.error);
 
-async function parseKeypair(solanaKeypair: Uint8Array): Promise<CryptoKeyPair> {
+async function parseKeypair(
+  solanaKeypair: Uint8Array
+): Promise<KeyPairSigner<string>> {
   const privateKeyBytes = solanaKeypair.slice(0, 32);
   const publicKeyBytes = solanaKeypair.slice(32);
 
@@ -158,17 +151,15 @@ async function parseKeypair(solanaKeypair: Uint8Array): Promise<CryptoKeyPair> {
     crypto.subtle.importKey("raw", publicKeyBytes, "Ed25519", true, ["verify"]),
   ]);
 
-  return { privateKey, publicKey };
+  return createSignerFromKeyPair({ privateKey, publicKey });
 }
 
 const transferSOL = async (
-  keypair: CryptoKeyPair,
+  keypair: KeyPairSigner<string>,
   amount: number,
-  recipient: Base58EncodedAddress,
+  recipient: Address,
   simulate: boolean
 ) => {
-  const signerPub = await getAddressFromPublicKey(keypair.publicKey);
-
   const data = new Uint8Array(12);
   const view = new DataView(data.buffer);
   view.setUint32(0, 2, true);
@@ -178,7 +169,7 @@ const transferSOL = async (
     programAddress: address("11111111111111111111111111111111"),
     accounts: [
       {
-        address: signerPub,
+        address: keypair.address,
         role: AccountRole.WRITABLE_SIGNER,
       },
       {
@@ -191,14 +182,15 @@ const transferSOL = async (
 
   const bh = await rpc.getLatestBlockhash().send();
 
-  const encodedTx = await pipe(
-    createTransaction({ version: 0 }),
-    (tx) => appendTransactionInstruction(ix, tx),
-    (tx) => setTransactionFeePayer(signerPub, tx),
-    (tx) => setTransactionLifetimeUsingBlockhash(bh.value, tx),
-    (tx) => signTransaction([keypair], tx),
-    async (tx) => getBase64EncodedWireTransaction(await tx)
+  const txMsg = await pipe(
+    createTransactionMessage({ version: 0 }),
+    (tx) => appendTransactionMessageInstruction(ix, tx),
+    (tx) => setTransactionMessageFeePayerSigner(keypair, tx),
+    (tx) => setTransactionMessageLifetimeUsingBlockhash(bh.value, tx)
   );
+
+  const signedTx = await signTransactionMessageWithSigners(txMsg);
+  const encodedTx = await getBase64EncodedWireTransaction(signedTx);
 
   if (simulate) {
     const sx = await rpc
