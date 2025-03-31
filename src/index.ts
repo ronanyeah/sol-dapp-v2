@@ -1,7 +1,5 @@
-/* eslint-disable fp/no-mutation, fp/no-mutating-methods */
 const { Elm } = require("./Main.elm");
 import { ElmApp } from "./ports";
-import { pipe } from "@solana/functional";
 import {
   Address,
   lamports,
@@ -18,10 +16,20 @@ import {
   IInstruction,
   createTransactionMessage,
   createSolanaRpc,
-} from "@solana/web3.js";
-import { createPrivateKeyFromBytes } from "@solana/keys";
+  createPrivateKeyFromBytes,
+  pipe,
+} from "@solana/kit";
 
-import "@solana/webcrypto-ed25519-polyfill";
+import { install } from "@solana/webcrypto-ed25519-polyfill";
+
+generateWallet().catch((e) => {
+  if (e.name === "NotSupportedError") {
+    console.warn("Installing Ed25519 polyfill");
+    install();
+  } else {
+    console.error(e);
+  }
+});
 
 const rpc = createSolanaRpc("https://api.devnet.solana.com");
 
@@ -35,19 +43,15 @@ let keypair: KeyPairSigner<string> | null = null;
   });
 
   app.ports.generateKey.subscribe(async () => {
-    // NOTE: generateKeyPair is not extractable
+    // NOTE: kit.generateKeyPair is not extractable
     // const newKeys = await generateKeyPair();
-    const extractable = true;
-    const newKeys = await crypto.subtle.generateKey("Ed25519", extractable, [
-      "sign",
-      "verify",
-    ]);
+    const newKeys = await generateWallet();
     const signer = await createSignerFromKeyPair(newKeys);
     keypair = signer;
 
     app.ports.pubkeyCb.send({
       addr: signer.address,
-      exportable: extractable,
+      exportable: true,
     });
 
     app.ports.balanceCb.send(0);
@@ -182,7 +186,7 @@ const transferSOL = async (
 
   const bh = await rpc.getLatestBlockhash().send();
 
-  const txMsg = await pipe(
+  const txMsg = pipe(
     createTransactionMessage({ version: 0 }),
     (tx) => appendTransactionMessageInstruction(ix, tx),
     (tx) => setTransactionMessageFeePayerSigner(keypair, tx),
@@ -190,7 +194,7 @@ const transferSOL = async (
   );
 
   const signedTx = await signTransactionMessageWithSigners(txMsg);
-  const encodedTx = await getBase64EncodedWireTransaction(signedTx);
+  const encodedTx = getBase64EncodedWireTransaction(signedTx);
 
   if (simulate) {
     const sx = await rpc
@@ -220,4 +224,8 @@ async function readKeyfile(file: File): Promise<Uint8Array> {
   const parsed = JSON.parse(content);
 
   return new Uint8Array(parsed);
+}
+
+function generateWallet(): Promise<CryptoKeyPair> {
+  return crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
 }
