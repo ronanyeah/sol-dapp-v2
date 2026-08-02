@@ -3,6 +3,10 @@ port module Ports exposing (..)
 import Json.Decode exposing (Value)
 
 
+type alias Flags =
+    {}
+
+
 
 -- OUT
 

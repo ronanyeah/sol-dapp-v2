@@ -1,4 +1,4 @@
-const { Elm } = require("./Main.elm");
+import Elm from "./Main.elm";
 import { ElmApp } from "./ports";
 import {
   Address,
@@ -13,32 +13,20 @@ import {
   setTransactionMessageLifetimeUsingBlockhash,
   appendTransactionMessageInstruction,
   AccountRole,
-  IInstruction,
+  Instruction,
   createTransactionMessage,
   createSolanaRpc,
   createPrivateKeyFromBytes,
   pipe,
 } from "@solana/kit";
 
-import { install } from "@solana/webcrypto-ed25519-polyfill";
-
-generateWallet().catch((e) => {
-  if (e.name === "NotSupportedError") {
-    console.warn("Installing Ed25519 polyfill");
-    install();
-  } else {
-    console.error(e);
-  }
-});
-
 const rpc = createSolanaRpc("https://api.devnet.solana.com");
 
-// eslint-disable-next-line fp/no-let
 let keypair: KeyPairSigner<string> | null = null;
 
 (async () => {
-  const app: ElmApp = Elm.Main.init({
-    node: document.getElementById("app"),
+  const app: ElmApp = Elm.init({
+    node: document.getElementById("app")!,
     flags: {},
   });
 
@@ -71,9 +59,9 @@ let keypair: KeyPairSigner<string> | null = null;
       });
 
       app.ports.balanceCb.send(
-        Number((await rpc.getBalance(pair.address).send()).value)
+        Number((await rpc.getBalance(pair.address).send()).value),
       );
-    })().catch(console.error)
+    })().catch(console.error),
   );
 
   app.ports.exportKeys.subscribe(() =>
@@ -92,7 +80,7 @@ let keypair: KeyPairSigner<string> | null = null;
       solanaKey.set(new Uint8Array(exportedPublicKey), 32);
 
       app.ports.keysCb.send(Array.from(solanaKey));
-    })().catch(console.error)
+    })().catch(console.error),
   );
 
   app.ports.logout.subscribe(async () => {
@@ -117,7 +105,7 @@ let keypair: KeyPairSigner<string> | null = null;
       } else {
         alert("Airdrop failure!");
       }
-    })
+    }),
   );
 
   app.ports.refreshBalance.subscribe(() =>
@@ -127,9 +115,9 @@ let keypair: KeyPairSigner<string> | null = null;
       }
 
       app.ports.balanceCb.send(
-        Number((await rpc.getBalance(keypair.address).send()).value)
+        Number((await rpc.getBalance(keypair.address).send()).value),
       );
-    })().catch(console.error)
+    })().catch(console.error),
   );
 
   app.ports.sendTx.subscribe(({ amount, recipient, simulate }) =>
@@ -139,12 +127,12 @@ let keypair: KeyPairSigner<string> | null = null;
       }
       assertIsAddress(recipient);
       await transferSOL(keypair, amount, recipient, simulate);
-    })().catch(console.error)
+    })().catch(console.error),
   );
 })().catch(console.error);
 
 async function parseKeypair(
-  solanaKeypair: Uint8Array
+  solanaKeypair: Uint8Array,
 ): Promise<KeyPairSigner<string>> {
   const privateKeyBytes = solanaKeypair.slice(0, 32);
   const publicKeyBytes = solanaKeypair.slice(32);
@@ -162,14 +150,14 @@ const transferSOL = async (
   keypair: KeyPairSigner<string>,
   amount: number,
   recipient: Address,
-  simulate: boolean
+  simulate: boolean,
 ) => {
   const data = new Uint8Array(12);
   const view = new DataView(data.buffer);
   view.setUint32(0, 2, true);
   view.setBigInt64(4, BigInt(amount), true);
 
-  const ix: IInstruction = {
+  const ix: Instruction = {
     programAddress: address("11111111111111111111111111111111"),
     accounts: [
       {
@@ -190,7 +178,7 @@ const transferSOL = async (
     createTransactionMessage({ version: 0 }),
     (tx) => appendTransactionMessageInstruction(ix, tx),
     (tx) => setTransactionMessageFeePayerSigner(keypair, tx),
-    (tx) => setTransactionMessageLifetimeUsingBlockhash(bh.value, tx)
+    (tx) => setTransactionMessageLifetimeUsingBlockhash(bh.value, tx),
   );
 
   const signedTx = await signTransactionMessageWithSigners(txMsg);

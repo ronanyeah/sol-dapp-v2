@@ -1,20 +1,13 @@
 {
   "scripts": {
-    "build": "webpack",
-    "watch": "webpack serve"
+    "build": "vite build",
+    "watch": "vite"
   },
   "dependencies": {
-    "@solana/kit": "^2.1.0",
-    "@solana/webcrypto-ed25519-polyfill": "^2.0.0-experimental.606040b",
-    "elm": "^0.19.1-3",
-    "elm-webpack-loader": "^8.0.0",
-    "ts-loader": "^9.5.1",
-    "typescript": "^5.3.3",
-    "webpack": "^5.90.1",
-    "webpack-cli": "^6.0.1"
-  },
-  "devDependencies": {
-    "elm-reloader": "^1.0.0",
-    "webpack-dev-server": "^5.0.4"
+    "@ronanyeah/vite-plugin-elm-2": "^1.0.2",
+    "@solana/kit": "^7.0.0",
+    "elm": "^0.19.2-0",
+    "typescript": "^6.0.3",
+    "vite-plugin-checker": "^0.14.5"
   }
 }
