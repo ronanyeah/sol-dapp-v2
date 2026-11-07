@@ -1,19 +1,19 @@
 import Elm from "./Main.elm";
-import { ElmApp } from "./ports";
+import { type ElmApp } from "./ports";
 import {
-  Address,
+  type Address,
+  type Instruction,
+  type KeyPairSigner,
   lamports,
   address,
   assertIsAddress,
   createSignerFromKeyPair,
-  KeyPairSigner,
   signTransactionMessageWithSigners,
   getBase64EncodedWireTransaction,
   setTransactionMessageFeePayerSigner,
   setTransactionMessageLifetimeUsingBlockhash,
   appendTransactionMessageInstruction,
   AccountRole,
-  Instruction,
   createTransactionMessage,
   createSolanaRpc,
   createPrivateKeyFromBytes,
@@ -45,8 +45,11 @@ let keypair: KeyPairSigner<string> | null = null;
     app.ports.balanceCb.send(0);
   });
 
-  app.ports.fileOut.subscribe(async (val: File) =>
+  app.ports.fileOut.subscribe((val) =>
     (async () => {
+      if (!(val instanceof File)) {
+        throw Error("not a file");
+      }
       const kp = await readKeyfile(val);
 
       const pair = await parseKeypair(kp);

@@ -1,13 +1,15 @@
 {
+  "type": "module",
   "scripts": {
     "build": "vite build",
     "watch": "vite"
   },
   "dependencies": {
     "@ronanyeah/vite-plugin-elm-2": "^1.0.2",
-    "@solana/kit": "^7.0.0",
-    "elm": "^0.19.2-0",
-    "typescript": "^6.0.3",
+    "@solana/kit": "^8.6.0",
+    "@tsconfig/strictest": "^2.0.8",
+    "elm": "^0.19.3-0",
+    "typescript": "^7.0.2",
     "vite-plugin-checker": "^0.14.5"
   }
 }
